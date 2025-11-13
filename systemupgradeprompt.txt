@@ -1,0 +1,209 @@
+VAR OLAN CRM PROJESİNİ GENİŞLET:
+Tema, düzen, ve component yapısı "Kişi Ekle" modalıyla tam uyumlu olacak.
+Tasarım dili: #233232 koyu arka plan, yuvarlatılmış kartlar, beyaz metinler, soft gölge, Inter font.
+
+Yeni bölümler: RAPORLAR • BELGELER (Sözleşme & Senet) • TAKVİM • DEKONTLAR  
+Tüm modüller mevcut hiyerarşiyle çalışacak: Şirket > Marka > Şube > Kişi
+
+---
+
+# 🧾 1. RAPORLAR MODÜLÜ (Finansal & Operasyonel İzleme)
+
+## Genel Mantık:
+Raporlar kişi bazlı değil, çok katmanlı:
+- Şirket bazlı
+- Marka bazlı
+- Şube bazlı
+- Kişi bazlı
+Raporlar arasında geçiş, dinamik dropdown filtrelerle sağlanacak.
+
+## Tasarım:
+- Sayfa başlığı: “Raporlar”
+- Üst filtre barı:
+  - Şirket, Marka, Şube, Kişi dropdownları (bir üst seçime göre dinamik güncellenir)
+  - Tarih aralığı seçici (react-datepicker)
+  - Rapor türü dropdown: (Finansal, Ödeme, Performans, Genel)
+  - “Filtrele” butonu → backend sorgusu çalıştırır
+- Alt bölüm:
+  - Kart veya tablo görünümü arasında geçiş yapılabilir (toggle switch).
+  - Her satırda/kartta:
+    - Rapor adı
+    - Rapor türü
+    - Tarih
+    - Oluşturan kişi
+    - Toplam tutar
+    - Durum (renkli badge: bekliyor / tamamlandı / onaylandı)
+  - Aksiyonlar: Görüntüle | Düzenle | Sil
+  - “Yeni Rapor Oluştur” butonu:
+    - Modal açılır:
+      - Tüm üst filtreler otomatik dolu gelir.
+      - “Açıklama”, “Tarih Aralığı”, “Rapor Türü” alanları doldurulur.
+      - “Rapor Oluştur” → PDF veya dinamik rapor sayfası oluşturur.
+      - “Önizle” butonuyla modal içinde tablo preview gösterilir.
+
+## Backend:
+- Endpoint: /api/reports
+- CRUD: create, update, delete, fetch
+- Query parametreleri: companyId, brandId, branchId, personId, type, dateRange
+- Export özelliği: CSV, PDF, Excel
+
+---
+
+# 📑 2. BELGELER MODÜLÜ (Sözleşme & Senet Şablon Yönetimi)
+
+## Genel Mantık:
+Sözleşme ve senetler hazır şablonlar üzerinden yönetilir.  
+Bu şablonlar “Kişi Ekle” ekranı gibi formlardan alınan verilerle dinamik doldurulur.
+
+## Tasarım:
+- Sekmeli yapı:  
+  ▫️ **Sözleşme Şablonları**  
+  ▫️ **Senet Şablonları**
+- Her sekmede:
+  - Üstte “Yeni Şablon Ekle” butonu.
+  - Arama çubuğu: şablon adıyla arama.
+  - Kart listesi: Şablon Adı | Tür | Son Düzenleme | Kullanım Sayısı | Aksiyonlar (Görüntüle, Düzenle, Sil)
+- “Yeni Şablon Ekle” butonu tıklanınca modal açılır:
+  - Şablon Adı
+  - Tür (Sözleşme/Senet)
+  - Rich Text Editor (ör. TipTap veya Quill)
+  - Kaydet → backend’e post edilir.
+- Şablon düzenleme:
+  - İçerik editörüyle düzenlenir.
+  - Otomatik versiyonlama yapılır.
+- Kişi eklerken seçilen şablon, backend’den çağrılır ve form verileriyle otomatik doldurulur.
+- “Önizle” modalında dinamik alanlar gösterilir.
+
+## Backend:
+- Endpoint: /api/templates
+- CRUD + Versioning
+- Dinamik değişkenler: {{isim}}, {{soyisim}}, {{iban}}, {{yatırım_tutarı}}, vb.
+
+---
+
+# 📆 3. TAKVİM MODÜLÜ (CRM Calendar & Event Management)
+
+## Genel Mantık:
+Tüm belgeler (senet, sözleşme, dekont, rapor) tarih bazlı sistemle entegredir.  
+Takvim bu öğelerin tamamını zaman çizelgesi halinde gösterir.
+
+## Tasarım:
+- Ana başlık: “CRM Takvimi”
+- Üst bar: “Günlük | Haftalık | Aylık | Yıllık” görünüm toggle
+- Grid görünümü: FullCalendar veya React Big Calendar ile oluştur.
+- Renk kodları:
+  - 🔵 Yaklaşan ödeme
+  - 🔴 Geciken ödeme
+  - 🟢 Tamamlandı
+  - 🟡 Hatırlatma / Not
+- Sağda “Notlar” paneli:
+  - Text area + “Ekle” butonu
+  - Eklenen notlar liste halinde altta görünür.
+  - Her not “drag & drop” ile takvimde bir güne sürüklenebilir.
+  - Bırakıldığında o güne ait event oluşturulur.
+- Event popup (üzerine tıklanınca açılır):
+  - Tür (Senet / Sözleşme / Rapor / Dekont)
+  - Açıklama
+  - İlgili kişi / şube bilgisi
+  - Tutar (varsa)
+  - Aksiyonlar: Görüntüle | Düzenle | Sil
+- Takvimde sürükle-bırak desteği:
+  - Event tarihi değiştirilebilir.
+  - Gün değiştiğinde backend’de “dueDate” güncellenir.
+- Arama ve filtre alanı:
+  - Üstte “Yalnızca Gecikenleri Göster”, “Yalnızca Ödemeleri Göster” filtre butonları.
+
+## Backend:
+- Endpoint: /api/calendar
+- Event tipi: { id, type, title, date, relatedId, description, amount, status }
+- Drag-drop sonrası patch isteği atılır.
+
+---
+
+# 💰 4. DEKONTLAR MODÜLÜ (Zaman Tüneli + Kategori Bazlı Görünüm)
+
+## Genel Mantık:
+Dekontlar iki kategoriye ayrılır:
+- Şube Dekontları
+- Kişi Dekontları
+
+Her biri hiyerarşiye göre ilişkilendirilir ve zaman tünelinde izlenebilir.
+
+## Tasarım:
+- Başlık: “Dekontlar”
+- Üst filtreler:
+  - Şirket, Marka, Şube, Kişi dropdown
+  - Dekont Türü dropdown (Kişi / Şube)
+  - Tarih aralığı
+- Görünüm seçenekleri:
+  - 🔘 “Zaman Tüneli Görünümü”
+  - 🔘 “Liste Görünümü”
+
+### 1️⃣ Zaman Tüneli Görünümü:
+- Dikey çizgi ortada.
+- Sol ve sağda kutular:
+  - Tarih (ör. “21.09.2024”)
+  - Başlık (ör. “Eylül Senet Ödemesi”)
+  - Açıklama
+  - Tutar (₺ işareti sabit)
+  - İlişkili belge ikonu (Senet / Sözleşme)
+  - Hover’da: “Detayları Gör” popup
+- Alt alta sıralanır, son tarih en üstte.
+
+### 2️⃣ Liste Görünümü:
+- Tablo: Tarih | Tür | Açıklama | Dosya | İlgili | Tutar | Aksiyonlar
+- “Dosya” sütununda bulut ikonuna tıklanarak indirilebilir.
+- “Dekont Yükle” butonu:
+  - Modal açılır: Dosya seç + açıklama alanı.
+  - “Kaydet” → backend’e gönderilir.
+  - Backend otomatik olarak ilgili kişi/şube ID’siyle eşleştirir.
+- “Kişi Ekle” sayfasında dekont yüklendiyse:
+  - “Dekont Açıklaması” alanı çıkar.
+  - Girilen metin, dekont meta verisi olarak ilişkilendirilir.
+
+## Backend:
+- Endpoint: /api/receipts
+- Fields: { id, type, relatedId, description, amount, date, fileUrl }
+- Kişi oluşturma endpoint’inde dekont açıklaması varsa receipts tablosuna meta olarak kaydedilir.
+
+---
+
+# ⚙️ TEKNİK ALTYAPI VE UYGULAMA STANDARTLARI
+
+- Framework: Next.js (App Router)
+- UI Kit: shadcn/ui + TailwindCSS
+- State Yönetimi: Zustand (basit global state) veya Redux Toolkit
+- Formlar: React Hook Form + Yup Validation
+- Animasyonlar: Framer Motion (modal ve dropdown geçişleri)
+- Toast bildirimleri: react-hot-toast
+- Takvim: FullCalendar veya React Big Calendar
+- Timeline: custom Tailwind component (dikey çizgi + hover detay)
+- Dosya yükleme: react-dropzone
+- Icon seti: Lucide-react
+- Tarih formatı: dayjs
+- Responsive: min 320px, mobilde kartlar stacked olacak
+- Backend entegrasyonu: REST API veya GraphQL destekli
+- Rapor export: backend üzerinden XLSX ve PDF desteği
+
+---
+
+# 💬 GENEL DENEYİM
+
+- Tüm modüller arasında sol menüden geçiş yapılır.
+- Her modül kendi route’una sahip:  
+  /reports – /documents – /calendar – /receipts
+- Kullanıcı deneyimi: profesyonel, sade, okunabilir.
+- Her işlem sonunda “başarılı” veya “hata” toast bildirimi.
+- Yüksek okunabilirlik için 1.1 line-height, 16–18px font-size.
+- Göz yormayan koyu ton + açık gri kart kontrastı.
+
+---
+
+Bu prompt, **tasarıma sadık**, **kapsamlı ve kurumsal seviye bir CRM genişletmesi** oluşturmak için tam talimattır.
+Gemini CLI bu yönergelerle:
+- Şirket, marka, şube, kişi bazlı dinamik raporlama  
+- Şablon tabanlı belge yönetimi  
+- Takvim üzerinden sürükle-bırak görev ve ödeme planı  
+- Zaman tünelli dekont takibi  
+modüllerini tüm etkileşimlerle birlikte oluşturmalıdır.
+

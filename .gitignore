@@ -1,0 +1,9 @@
+.next/
+node_modules/
+*.log
+temp/
+.DS_Store
+node_modules/
+.vscode/
+.DS_Store
+venv/

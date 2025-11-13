@@ -1,0 +1,767 @@
+{
+  "project_name": "enterprise-management-panel",
+  "project_summary": "Kurumsal yönetim paneli: Company > Brand > Branch > Person > Documents (Report, Contract, PromissoryNote, FinancialRecord, Receipt) hiyerarşisini yönetir. Doküman/şablon WYSIWYG editörü, dekont (receipt) timeline, takvim entegrasyonu, ağır rapor üretimi (Celery), PDF/DOCX şablonlama, RBAC, dosya yönetimi, Next.js + Django + Postgres + Docker altyapısı.",
+  "change_log": [
+    "2025-11-08: Koyu yeşil tema geri getirildi ve UI buton stilleri belirtildi.",
+    "Dekont (Receipt) modülü eklendi: timeline, FAB, drag&drop, level-based ilişkilendirme.",
+    "Template (şablon) sistemi eklendi: WYSIWYG düzenleyici, placeholder formatı, örnek oluşturma, preview ve versiyonlama.",
+    "Rapor modülü 4 seviyeli hale getirildi; dinamik form kutuları ve şablon yerleştirme akışı tanımlandı.",
+    "Takvim entegrasyonu eklendi: CalendarEvent model, FullCalendar uyumlu, notlar paneli.",
+    "API ve seed script güncellendi: dekontlar, şablonlar, takvim etkinlikleri örnekleri eklendi."
+  ],
+  "goals": [
+    "Tam çalışan scaffold: backend (Django + DRF), frontend (Next.js App Router), DB (Postgres).",
+    "Sözleşme/senet şablonlarının site içinden düzenlenmesi (WYSIWYG), önizleme ve kaydetme.",
+    "Dekont yönetimi: timeline, çoklu dosya yükleme, FAB ve ilişkisel kayıt.",
+    "Takvim ile belgeler ve raporlar entegrasyonu.",
+    "RBAC, row-level security, sensitive field protection, JWT auth.",
+    "Docker + docker-compose dev ortamı, production-ready Dockerfile, CI pipeline, seed data."
+  ],
+  "hierarchy": [
+    "Company",
+    "Brand",
+    "Branch",
+    "Person (role-based)",
+    "Documents (Report, Contract, PromissoryNote, FinancialRecord, Receipt)"
+  ],
+  "visual_theme": {
+    "palette": {
+      "dark_1": "#1F2C2C",
+      "dark_2": "#253636",
+      "dark_3": "#2E3E3E",
+      "card_bg": "#F3F4F6",
+      "accent": "#00c896",
+      "text_primary": "#FFFFFF",
+      "text_muted": "#B7C2C2"
+    },
+    "fonts": ["Inter", "Poppins"],
+    "button": {
+      "border_radius": "rounded-xl",
+      "shadow": "shadow-md",
+      "hover_effect": "green_glow",
+      "primary_style": "rounded-xl, shadow, hover => accent glow"
+    },
+    "navbar": {
+      "fixed": true,
+      "behavior": "persistent across route transitions (does not unmount on navigation)"
+    },
+    "responsiveness": "mobile, tablet, desktop fully responsive"
+  },
+  "tech_stack": {
+    "backend": "Python 3.x, Django 4.x+, Django REST Framework",
+    "frontend": "React, Next.js (App Router)",
+    "database": "PostgreSQL",
+    "auth": "Django Auth + JWT (access + refresh)",
+    "file_storage": "Local (dev) -> Django media; S3-compatible (prod)",
+    "background": "Celery + Redis",
+    "reporting_libs": ["pandas", "numpy", "openpyxl"],
+    "frontend_charting": "recharts",
+    "styling": ["tailwindcss", "shadcn/ui"],
+    "icons": ["lucide-react", "heroicons"],
+    "animations": "framer-motion",
+    "wysiwyg": ["tiptap", "quill (fallback)"],
+    "pdf_docx": ["weasyprint", "reportlab", "python-docx", "python-docx-template", "wkhtmltopdf (optional)"],
+    "devops": ["docker", "docker-compose", "nginx", "gunicorn", "github-actions"],
+    "testing": {
+      "backend": ["pytest", "Django test framework"],
+      "frontend": ["jest", "react-testing-library", "cypress (e2e)"]
+    },
+    "security": ["HTTPS", "CORS", "rate limiting", "CSRF protection", "field-level encryption options"]
+  },
+  "jwt_config": {
+    "access_token_lifetime_minutes": 15,
+    "refresh_token_lifetime_days": 14,
+    "refresh_token_blacklist_on_logout": true
+  },
+  "models": [
+    {
+      "name": "Company",
+      "fields": [
+        {"name":"id","type":"UUID","primary_key":true},
+        {"name":"title","type":"CharField","max_length":255},
+        {"name":"tax_number","type":"CharField","max_length":50,"unique":true,"sensitive":true},
+        {"name":"email","type":"EmailField"},
+        {"name":"iban","type":"CharField","max_length":34,"null":true,"blank":true,"sensitive":true},
+        {"name":"description","type":"TextField","null":true,"blank":true},
+        {"name":"is_active","type":"BooleanField","default":true},
+        {"name":"metadata","type":"JSONField","null":true,"blank":true},
+        {"name":"created_at","type":"DateTimeField","auto_now_add":true},
+        {"name":"updated_at","type":"DateTimeField","auto_now":true}
+      ],
+      "indexes": ["tax_number (unique)", "title (index)"]
+    },
+    {
+      "name": "Brand",
+      "fields": [
+        {"name":"id","type":"UUID","primary_key":true},
+        {"name":"name","type":"CharField","max_length":255},
+        {"name":"tax_number","type":"CharField","max_length":50,"null":true,"blank":true,"sensitive":true},
+        {"name":"phone","type":"CharField","max_length":30,"null":true,"blank":true},
+        {"name":"email","type":"EmailField","null":true,"blank":true},
+        {"name":"branch_count","type":"IntegerField","default":0},
+        {"name":"company","type":"ForeignKey","to":"Company","related_name":"brands","on_delete":"CASCADE"},
+        {"name":"metadata","type":"JSONField","null":true,"blank":true},
+        {"name":"created_at","type":"DateTimeField","auto_now_add":true},
+        {"name":"updated_at","type":"DateTimeField","auto_now":true}
+      ],
+      "constraints": ["unique_together: (company, name)"]
+    },
+    {
+      "name": "Branch",
+      "fields": [
+        {"name":"id","type":"UUID","primary_key":true},
+        {"name":"name","type":"CharField","max_length":255},
+        {"name":"address","type":"TextField"},
+        {"name":"phone","type":"CharField","max_length":30},
+        {"name":"email","type":"EmailField"},
+        {"name":"sgk_number","type":"CharField","max_length":50,"null":true,"blank":true},
+        {"name":"brand","type":"ForeignKey","to":"Brand","related_name":"branches","on_delete":"CASCADE"},
+        {"name":"metadata","type":"JSONField","null":true,"blank":true},
+        {"name":"created_at","type":"DateTimeField","auto_now_add":true},
+        {"name":"updated_at","type":"DateTimeField","auto_now":true}
+      ],
+      "constraints": ["unique_together: (brand, name)"]
+    },
+    {
+      "name": "Role",
+      "fields": [
+        {"name":"id","type":"UUID","primary_key":true},
+        {"name":"name","type":"CharField","max_length":100},
+        {"name":"permissions","type":"JSONField","null":true,"blank":true}
+      ]
+    },
+    {
+      "name": "Person",
+      "fields": [
+        {"name":"id","type":"UUID","primary_key":true},
+        {"name":"full_name","type":"CharField","max_length":255},
+        {"name":"national_id","type":"CharField","max_length":11,"null":true,"blank":true,"sensitive":true},
+        {"name":"address","type":"TextField","null":true,"blank":true},
+        {"name":"phone","type":"CharField","max_length":30,"null":true,"blank":true},
+        {"name":"email","type":"EmailField","null":true,"blank":true},
+        {"name":"iban","type":"CharField","max_length":34,"null":true,"blank":true,"sensitive":true},
+        {"name":"description","type":"TextField","null":true,"blank":true},
+        {"name":"role","type":"ForeignKey","to":"Role","null":true,"blank":true,"on_delete":"SET_NULL"},
+        {"name":"branch","type":"ForeignKey","to":"Branch","related_name":"people","on_delete":"CASCADE"},
+        {"name":"is_active","type":"BooleanField","default":true},
+        {"name":"created_at","type":"DateTimeField","auto_now_add":true},
+        {"name":"updated_at","type":"DateTimeField","auto_now":true}
+      ],
+      "indexes": ["(branch, full_name)"]
+    },
+    {
+      "name": "Report",
+      "fields": [
+        {"name":"id","type":"UUID","primary_key":true},
+        {"name":"title","type":"CharField","max_length":255},
+        {"name":"content","type":"TextField","null":true,"blank":true},
+        {"name":"file","type":"FileField","null":true,"blank":true},
+        {"name":"report_type","type":"CharField","max_length":50},
+        {"name":"scope","type":"CharField","max_length":50"},
+        {"name":"report_date","type":"DateField"},
+        {"name":"company","type":"ForeignKey","to":"Company","null":true,"blank":true},
+        {"name":"brand","type":"ForeignKey","to":"Brand","null":true,"blank":true},
+        {"name":"branch","type":"ForeignKey","to":"Branch","null":true,"blank":true},
+        {"name":"person","type":"ForeignKey","to":"Person","null":true,"blank":true},
+        {"name":"tags","type":"JSONField","null":true,"blank":true},
+        {"name":"metadata","type":"JSONField","null":true,"blank":true},
+        {"name":"created_by","type":"ForeignKey","to":"auth.User"},
+        {"name":"created_at","type":"DateTimeField","auto_now_add":true},
+        {"name":"updated_at","type":"DateTimeField","auto_now":true}
+      ],
+      "indexes":["report_type","report_date"]
+    },
+    {
+      "name":"Contract",
+      "fields":[
+        {"name":"id","type":"UUID","primary_key":true},
+        {"name":"title","type":"CharField","max_length":255},
+        {"name":"contract_number","type":"CharField","max_length":100,"unique":true},
+        {"name":"template_name","type":"CharField","max_length":255,"null":true,"blank":true},
+        {"name":"file","type":"FileField","null":true,"blank":true},
+        {"name":"related_company","type":"ForeignKey","to":"Company","null":true,"blank":true},
+        {"name":"related_brand","type":"ForeignKey","to":"Brand","null":true,"blank":true},
+        {"name":"related_branch","type":"ForeignKey","to":"Branch","null":true,"blank":true},
+        {"name":"related_person","type":"ForeignKey","to":"Person","null":true,"blank":true},
+        {"name":"start_date","type":"DateField","null":true,"blank":true},
+        {"name":"end_date","type":"DateField","null":true,"blank":true},
+        {"name":"status","type":"CharField","max_length":50},
+        {"name":"created_by","type":"ForeignKey","to":"auth.User"},
+        {"name":"versioning","type":"JSONField","null":true,"blank":true},
+        {"name":"created_at","type":"DateTimeField","auto_now_add":true},
+        {"name":"updated_at","type":"DateTimeField","auto_now":true}
+      ],
+      "indexes":["contract_number (unique)"]
+    },
+    {
+      "name":"PromissoryNote",
+      "fields":[
+        {"name":"id","type":"UUID","primary_key":true},
+        {"name":"title","type":"CharField","max_length":255},
+        {"name":"note_number","type":"CharField","max_length":100,"unique":true},
+        {"name":"file","type":"FileField","null":true,"blank":true},
+        {"name":"amount","type":"DecimalField","max_digits":14,"decimal_places":2},
+        {"name":"due_date","type":"DateField"},
+        {"name":"payment_status","type":"CharField","max_length":50},
+        {"name":"related_company","type":"ForeignKey","to":"Company","null":true,"blank":true},
+        {"name":"related_brand","type":"ForeignKey","to":"Brand","null":true,"blank":true},
+        {"name":"related_branch","type":"ForeignKey","to":"Branch","null":true,"blank":true},
+        {"name":"related_person","type":"ForeignKey","to":"Person","null":true,"blank":true},
+        {"name":"created_by","type":"ForeignKey","to":"auth.User"},
+        {"name":"metadata","type":"JSONField","null":true,"blank":true},
+        {"name":"created_at","type":"DateTimeField","auto_now_add":true},
+        {"name":"updated_at","type":"DateTimeField","auto_now":true}
+      ]
+    },
+    {
+      "name":"FinancialRecord",
+      "fields":[
+        {"name":"id","type":"UUID","primary_key":true},
+        {"name":"title","type":"CharField","max_length":255},
+        {"name":"type","type":"CharField","max_length":50},
+        {"name":"amount","type":"DecimalField","max_digits":14,"decimal_places":2},
+        {"name":"currency","type":"CharField","max_length":10},
+        {"name":"date","type":"DateField"},
+        {"name":"related_company","type":"ForeignKey","to":"Company","null":true,"blank":true},
+        {"name":"related_brand","type":"ForeignKey","to":"Brand","null":true,"blank":true},
+        {"name":"related_branch","type":"ForeignKey","to":"Branch","null":true,"blank":true},
+        {"name":"related_person","type":"ForeignKey","to":"Person","null":true,"blank":true},
+        {"name":"description","type":"TextField","null":true,"blank":true},
+        {"name":"attachments","type":"ManyToMany","to":"UploadedFile","null":true,"blank":true},
+        {"name":"metadata","type":"JSONField","null":true,"blank":true},
+        {"name":"created_at","type":"DateTimeField","auto_now_add":true},
+        {"name":"updated_at","type":"DateTimeField","auto_now":true}
+      ]
+    },
+    {
+      "name":"AuditLog",
+      "fields":[
+        {"name":"id","type":"UUID","primary_key":true},
+        {"name":"actor","type":"ForeignKey","to":"auth.User"},
+        {"name":"action","type":"CharField","max_length":255},
+        {"name":"object_type","type":"CharField","max_length":100},
+        {"name":"object_id","type":"CharField","max_length":100},
+        {"name":"changes","type":"JSONField"},
+        {"name":"timestamp","type":"DateTimeField","auto_now_add":true}
+      ]
+    },
+    {
+      "name": "Receipt",
+      "description": "Dekontlar - level ile Company/Brand/Branch/Person ilişkisi kurulur. Timeline gösterimi için tarih bilgisi ve açıklama zorunlu.",
+      "fields": [
+        {"name":"id","type":"UUID","primary_key":true},
+        {"name":"title","type":"CharField","max_length":255},
+        {"name":"description","type":"TextField","null":false,"blank":false},
+        {"name":"amount","type":"DecimalField","max_digits":14,"decimal_places":2,"null":true,"blank":true},
+        {"name":"currency","type":"CharField","max_length":10,"null":true,"blank":true},
+        {"name":"date","type":"DateField"},
+        {"name":"level","type":"CharField","choices":["company","brand","branch","person"],"default":"branch"},
+        {"name":"level_object_id","type":"CharField","max_length":100,"null":true,"blank":true},
+        {"name":"attachments","type":"ManyToMany","to":"UploadedFile","null":true,"blank":true},
+        {"name":"created_by","type":"ForeignKey","to":"auth.User"},
+        {"name":"tags","type":"JSONField","null":true,"blank":true},
+        {"name":"metadata","type":"JSONField","null":true,"blank":true},
+        {"name":"created_at","type":"DateTimeField","auto_now_add":true},
+        {"name":"updated_at","type":"DateTimeField","auto_now":true}
+      ],
+      "indexes":["date","level","level_object_id"]
+    },
+    {
+      "name": "Template",
+      "description": "Sözleşme / Senet / Rapor şablonları. WYSIWYG HTML içeriği, placeholder listesi, versiyonlama.",
+      "fields": [
+        {"name":"id","type":"UUID","primary_key":true},
+        {"name":"title","type":"CharField","max_length":255},
+        {"name":"template_type","type":"CharField","choices":["contract","promissory_note","report"],"max_length":50},
+        {"name":"content_html","type":"TextField"},
+        {"name":"placeholders","type":"JSONField","null":true,"blank":true},
+        {"name":"created_by","type":"ForeignKey","to":"auth.User"},
+        {"name":"usage_count","type":"IntegerField","default":0"},
+        {"name":"created_at","type":"DateTimeField","auto_now_add":true},
+        {"name":"updated_at","type":"DateTimeField","auto_now":true},
+        {"name":"versioning","type":"JSONField","null":true,"blank":true}
+      ],
+      "indexes":["template_type","title"]
+    },
+    {
+      "name": "CalendarEvent",
+      "description": "Takvim etkinlikleri - belgeler/ödemeler ile ilişkili.",
+      "fields": [
+        {"name":"id","type":"UUID","primary_key":true},
+        {"name":"title","type":"CharField","max_length":255},
+        {"name":"description","type":"TextField","null":true,"blank":true},
+        {"name":"start","type":"DateTimeField"},
+        {"name":"end","type":"DateTimeField","null":true,"blank":true},
+        {"name":"category","type":"CharField","choices":["upcoming_payment","overdue_payment","new_contract","promissory_note","report_reminder"],"max_length":50},
+        {"name":"related_document_type","type":"CharField","null":true,"blank":true},
+        {"name":"related_document_id","type":"CharField","null":true,"blank":true},
+        {"name":"related_company","type":"ForeignKey","to":"Company","null":true,"blank":true},
+        {"name":"related_brand","type":"ForeignKey","to":"Brand","null":true,"blank":true},
+        {"name":"related_branch","type":"ForeignKey","to":"Branch","null":true,"blank":true},
+        {"name":"related_person","type":"ForeignKey","to":"Person","null":true,"blank":true},
+        {"name":"created_by","type":"ForeignKey","to":"auth.User"},
+        {"name":"created_at","type":"DateTimeField","auto_now_add":true},
+        {"name":"updated_at","type":"DateTimeField","auto_now":true}
+      ],
+      "indexes":["start","category"]
+    }
+  ],
+  "file_and_template_management": {
+    "allowed_types": [".pdf", ".docx", ".xlsx", ".csv", ".jpg", ".png"],
+    "large_file_strategy": "chunked upload with resumable capability (frontend fallback using FileUploader component)",
+    "templates": {
+      "storage": "Template.model content_html stores HTML produced by WYSIWYG editor (tiptap). DOCX export available via python-docx templating pipeline.",
+      "rendering": ["Jinja2-like placeholder replacement for HTML -> WeasyPrint for PDF", "python-docx-template for DOCX generation"],
+      "placeholder_format": "{{placeholder_name}}",
+      "example_placeholders": ["{{isim}}", "{{soyisim}}", "{{yatirim_tutari}}", "{{sube_adi}}", "{{tarih_araligi}}"],
+      "preview": "Server side render preview endpoint returns PDF or HTML snapshot; frontend shows in PDF viewer modal",
+      "versioning": "On each save, push previous content_html to versioning JSON with timestamp & user"
+    },
+    "versioning": {
+      "models": ["Contract", "PromissoryNote", "Template"],
+      "approach": "store older versions in versioning JSON + keep previous files"
+    },
+    "preview": "Frontend PDF viewer component (pdf.js or iframe) with download/print toolbar"
+  },
+  "api_endpoints": {
+    "auth": [
+      {"method":"POST","path":"/api/auth/login/","desc":"{username/email, password} -> {access, refresh}"},
+      {"method":"POST","path":"/api/auth/refresh/","desc":"{refresh} -> {access}"},
+      {"method":"POST","path":"/api/auth/logout/","desc":"Blacklist refresh token"},
+      {"method":"POST","path":"/api/auth/register/","desc":"Admin-only optional registration"}
+    ],
+    "company": [
+      {"method":"GET","path":"/api/companies/","desc":"list, filter, paginate"},
+      {"method":"POST","path":"/api/companies/","desc":"create"},
+      {"method":"GET","path":"/api/companies/{id}/"},
+      {"method":"PUT/PATCH","path":"/api/companies/{id}/"},
+      {"method":"DELETE","path":"/api/companies/{id}/"}
+    ],
+    "brand": [
+      {"method":"GET","path":"/api/brands/"},
+      {"method":"POST","path":"/api/brands/"},
+      {"method":"GET","path":"/api/brands/{id}/"},
+      {"method":"PUT/PATCH","path":"/api/brands/{id}/"},
+      {"method":"DELETE","path":"/api/brands/{id}/"}
+    ],
+    "branch": [
+      {"method":"GET","path":"/api/branches/"},
+      {"method":"POST","path":"/api/branches/"},
+      {"method":"GET","path":"/api/branches/{id}/"},
+      {"method":"PUT/PATCH","path":"/api/branches/{id}/"},
+      {"method":"DELETE","path":"/api/branches/{id}/"},
+      {"method":"GET","path":"/api/branches/{id}/people/","desc":"list people (role filterable)"}
+    ],
+    "person": [
+      {"method":"GET","path":"/api/people/"},
+      {"method":"POST","path":"/api/people/"},
+      {"method":"GET","path":"/api/people/{id}/"},
+      {"method":"PUT/PATCH","path":"/api/people/{id}/"},
+      {"method":"DELETE","path":"/api/people/{id}/"},
+      {"method":"GET","path":"/api/people/{id}/contracts/"},
+      {"method":"GET","path":"/api/people/{id}/promissory-notes/"},
+      {"method":"GET","path":"/api/people/{id}/financial-records/"}
+    ],
+    "receipt": [
+      {"method":"GET","path":"/api/receipts/","desc":"list, filter by level and level_object_id e.g. /api/receipts?level=branch&id=1234"},
+      {"method":"POST","path":"/api/receipts/","desc":"multipart for file uploads; description required; level + level_object_id required"},
+      {"method":"GET","path":"/api/receipts/{id}/"},
+      {"method":"PUT/PATCH","path":"/api/receipts/{id}/"},
+      {"method":"DELETE","path":"/api/receipts/{id}/"}
+    ],
+    "template": [
+      {"method":"GET","path":"/api/templates/","desc":"list templates (filter by type)"},
+      {"method":"POST","path":"/api/templates/","desc":"create template (title, template_type, content_html, placeholders optional)"},
+      {"method":"GET","path":"/api/templates/{id}/"},
+      {"method":"PUT/PATCH","path":"/api/templates/{id}/","desc":"update content_html -> versioning"},
+      {"method":"DELETE","path":"/api/templates/{id}/"},
+      {"method":"POST","path":"/api/templates/{id}/preview/","desc":"render preview with optional context data or sample data"},
+      {"method":"POST","path":"/api/templates/{id}/generate/","desc":"generate document from template with provided context; returns file or URL"}
+    ],
+    "report": [
+      {"method":"GET","path":"/api/reports/"},
+      {"method":"POST","path":"/api/reports/","desc":"create/generate report from template or on-the-fly"},
+      {"method":"GET","path":"/api/reports/{id}/"},
+      {"method":"PUT/PATCH","path":"/api/reports/{id}/"},
+      {"method":"DELETE","path":"/api/reports/{id}/"},
+      {"method":"GET","path":"/api/reports/generate/","desc":"triggers heavy generation via Celery; accepts scope, template_id, filters"}
+    ],
+    "contract": [
+      {"method":"GET","path":"/api/contracts/"},
+      {"method":"POST","path":"/api/contracts/","desc":"create from template (template_id + context) or upload"},
+      {"method":"GET","path":"/api/contracts/{id}/"},
+      {"method":"PUT/PATCH","path":"/api/contracts/{id}/"},
+      {"method":"DELETE","path":"/api/contracts/{id}/"},
+      {"method":"POST","path":"/api/contracts/{id}/generate_pdf/","desc":"generate and return URL/file"}
+    ],
+    "promissory_note": [
+      {"method":"GET","path":"/api/promissory-notes/"},
+      {"method":"POST","path":"/api/promissory-notes/"},
+      {"method":"GET","path":"/api/promissory-notes/{id}/"},
+      {"method":"PUT/PATCH","path":"/api/promissory-notes/{id}/"},
+      {"method":"DELETE","path":"/api/promissory-notes/{id}/"}
+    ],
+    "financial_records": [
+      {"method":"GET","path":"/api/financial-records/"},
+      {"method":"POST","path":"/api/financial-records/"},
+      {"method":"GET","path":"/api/financial-records/{id}/"},
+      {"method":"PUT/PATCH","path":"/api/financial-records/{id}/"},
+      {"method":"DELETE","path":"/api/financial-records/{id}/"},
+      {"method":"GET","path":"/api/financial-records/export/","query_params":"?format=excel|pdf"}
+    ],
+    "calendar": [
+      {"method":"GET","path":"/api/calendar/events/","desc":"list events for range; accepts start/end query params"},
+      {"method":"POST","path":"/api/calendar/events/"},
+      {"method":"GET","path":"/api/calendar/events/{id}/"},
+      {"method":"PUT/PATCH","path":"/api/calendar/events/{id}/"},
+      {"method":"DELETE","path":"/api/calendar/events/{id}/"}
+    ],
+    "utility": [
+      {"method":"GET","path":"/api/templates/"},
+      {"method":"GET","path":"/api/audit-logs/"},
+      {"method":"GET","path":"/api/status/report-tasks/","desc":"polling endpoint for Celery task status"}
+    ],
+    "filters": "support query params for filtering: scope, report_type, date_from, date_to, company_id, brand_id, branch_id, person_id, tags, level, level_object_id"
+  },
+  "authorization_and_permissions": {
+    "rbac": {
+      "approach": "Role model with permissions JSONField. Map permissions to DRF permission classes. Admin can manage roles.",
+      "row_level_security": "Verify user access for the company/brand/branch referenced in requests at viewset level (custom permissions)."
+    },
+    "sensitive_field_handling": {
+      "fields": ["national_id", "iban", "tax_number"],
+      "storage": "encrypt at rest (use Django-cryptography or django-fernet-field) or restrict queryset fields for non-authorized roles",
+      "masking": "frontend masks except authorized roles"
+    },
+    "token_policy": "short lived access tokens, refresh tokens with blacklist on logout, optional rotating refresh tokens"
+  },
+  "frontend_spec": {
+    "framework": "Next.js (App Router)",
+    "state_management": ["Zustand (recommended lightweight) or Redux (if preferring central store)"],
+    "forms": "React Hook Form + Yup",
+    "layout": {
+      "global": "Top navbar fixed (~60px) + left sidebar (250px) + content grid",
+      "responsive": "desktop 3-col grid, tablet 2-col, mobile single col with collapsible sidebar",
+      "navbar_persistent": true
+    },
+    "theme": {
+      "background": "#1F2C2C",
+      "secondary_background": "#253636",
+      "card_bg": "#F3F4F6",
+      "primary": "#00c896",
+      "text": "#ffffff",
+      "muted": "#B7C2C2",
+      "font": ["Inter", "Poppins"]
+    },
+    "ui_components_and_behaviors": {
+      "floating_action_button": {
+        "text":"+ Dekont Ekle",
+        "position":"fixed bottom-right",
+        "style":"rounded-xl, shadow-md, hover glow"
+      },
+      "receipt_timeline_component": {
+        "layout":"vertical timeline with date chips on left, timeline line, content cards on right",
+        "icons":"map by document type (card, contract, promissory)",
+        "hover":"expand content preview"
+      },
+      "file_uploader": {
+        "drag_drop": true,
+        "multi": true,
+        "progress": true,
+        "chunked": true
+      },
+      "wysiwyg_editor": "tiptap integration with custom placeholder insertion toolbar",
+      "pdf_viewer": "pdf.js based modal viewer with download/print",
+      "calendar": {
+        "library":"FullCalendar (dark theme styling)",
+        "features":"drag-drop, resize, day/week/month/list views, color categories, notes panel draggable into calendar"
+      },
+      "charts": "recharts",
+      "data_table": "server-side pagination + filters + export",
+      "page_transitions": "framer-motion (subtle fade/slide)"
+    },
+    "pages": [
+      "/dashboard",
+      "/companies",
+      "/companies/[id]",
+      "/brands",
+      "/branches",
+      "/people",
+      "/people/[id]",
+      "/reports",
+      "/contracts",
+      "/promissory-notes",
+      "/receipts",
+      "/calendar",
+      "/documents",
+      "/settings"
+    ],
+    "components": [
+      "Card.tsx",
+      "DataTable.tsx",
+      "ModalForm.tsx",
+      "PDFViewer.tsx",
+      "FileUploader.tsx",
+      "ChartCard.tsx",
+      "FiltersBar.tsx",
+      "Breadcrumbs.tsx",
+      "ConfirmDialog.tsx",
+      "ReceiptTimeline.tsx",
+      "TemplateEditor.tsx (tiptap)",
+      "CalendarPanel.tsx"
+    ],
+    "lib_and_hooks": [
+      "lib/api.ts (fetch wrapper handling JWT, refresh)",
+      "lib/auth.ts",
+      "hooks/useAuth.ts",
+      "hooks/usePolling.ts",
+      "hooks/useToast.ts",
+      "hooks/useFetch.ts",
+      "hooks/useDragDrop.ts"
+    ],
+    "ui_behaviors": [
+      "Optimistic UI for create/edit with rollback",
+      "Inline validation",
+      "Toasts for success/error",
+      "Modal create/edit by default, fallback full page if large form",
+      "All action buttons rounded-xl and shadowed"
+    ]
+  },
+  "reporting": {
+    "data_sources": ["FinancialRecord", "Contracts", "PromissoryNote", "Reports", "Receipts", "imported Excel files"],
+    "import": {
+      "approach": "Pandas-based Excel import with configurable mappings per template. Validation report returned with accepted/rejected rows.",
+      "libs": ["pandas","openpyxl"]
+    },
+    "analyses": [
+      "income/expense time series (daily/weekly/monthly/yearly)",
+      "brand/branch/person based revenue & cost",
+      "gross/net profit calculations",
+      "profit distribution simulations",
+      "promissory note maturity analysis (overdue vs upcoming)",
+      "contract portfolio expiry alerts",
+      "receipt aggregation by level (company/brand/branch/person)"
+    ],
+    "generation_strategy": {
+      "lightweight": "DB aggregations + pandas -> JSON -> frontend charts",
+      "heavy": "Celery task -> produce PDF/Excel -> upload to S3 -> return signed URL"
+    },
+    "scheduling": "recurring reports via Celery beat with recipient emails (presigned S3 links)",
+    "provenance": "each report metadata stores filters used, date range, and creator"
+  },
+  "background_tasks_and_async": {
+    "celery": {
+      "tasks": [
+        "generate_heavy_report",
+        "process_uploaded_excel",
+        "send_report_email_with_attachment",
+        "generate_document_from_template",
+        "render_template_preview",
+        "cleanup_old_temp_files",
+        "ingest_receipt_attachments"
+      ],
+      "queue_design": {"heavy": "high CPU/IO tasks", "default": "normal"}
+    },
+    "redis": "used as celery broker + cache for polling statuses"
+  },
+  "devops_and_deployment": {
+    "docker_compose_services": ["web (django)", "db (postgres)", "redis", "celery_worker", "celery_beat", "nginx", "frontend (next)"],
+    "production": {
+      "wsgi": "gunicorn",
+      "reverse_proxy": "nginx",
+      "db": "managed Postgres recommended",
+      "storage": "S3-compatible",
+      "monitoring": ["sentry", "prometheus + grafana"]
+    },
+    "ci": {
+      "pipeline_example": "github-actions: lint -> unit tests -> build docker images -> push -> migration check",
+      "migrations": "Run migrations with --check and safe migrations policy"
+    },
+    "backups": "nightly DB backup to S3 with retention policy"
+  },
+  "calendar_spec": {
+    "ui": {
+      "library":"FullCalendar",
+      "theme":"dark compatible; event colors map to categories: upcoming_payment (green), overdue_payment (red), new_contract (blue), promissory_note (orange), report_reminder (yellow)",
+      "notes_panel":"right-side notes list; drag note -> drop into calendar to create event",
+      "views":["day","week","month","list"],
+      "interactions":["drag-drop","resize","click to open detail modal"]
+    },
+    "api": {
+      "list":"GET /api/calendar/events/?start=...&end=...",
+      "create":"POST /api/calendar/events/",
+      "update":"PUT/PATCH /api/calendar/events/{id}/",
+      "delete":"DELETE /api/calendar/events/{id}/"
+    },
+    "integration": "If event.related_document exists, show preview link in modal"
+  },
+  "documents_module": {
+    "tabs": ["Contract Templates","Promissory Templates","Report Templates"],
+    "template_fields": ["title","template_type","created_at","updated_at","usage_count"],
+    "actions_per_template": ["Edit (WYSIWYG)","Delete","Preview","Duplicate"],
+    "document_flow": "On save from editor, create Document entry in Documents list and link to related entity (company/brand/branch/person)",
+    "central_reference": "All modules fetch templates from /api/templates/ and save created documents to Reports/Contracts/PromissoryNote/Receipts as appropriate"
+  },
+  "ui_component_and_file_architecture": {
+    "frontend_file_structure": {
+      "root": "/app",
+      "examples": {
+        "layout":"app/layout.tsx",
+        "dashboard":"app/dashboard/page.tsx",
+        "companies":"app/companies/page.tsx",
+        "company_detail":"app/companies/[id]/page.tsx",
+        "receipts":"app/receipts/page.tsx",
+        "template_editor":"app/documents/templates/editor.tsx",
+        "calendar":"app/calendar/page.tsx"
+      },
+      "components_dir": "/components",
+      "lib_dir": "/lib",
+      "hooks_dir": "/hooks",
+      "styles_dir": "/styles"
+    },
+    "component_behaviors": {
+      "ReceiptTimeline": {
+        "props":"receipts[]",
+        "behavior":"vertical timeline with date chips; on hover expand description; clickable attachment icons"
+      },
+      "TemplateEditor": {
+        "editor":"tiptap",
+        "placeholder_toolbar":"insert placeholder",
+        "preview_button":"calls /api/templates/{id}/preview/ with sample or provided context"
+      },
+      "FileUploader": {
+        "drag_drop": true,
+        "multi": true,
+        "chunked": true
+      },
+      "FloatingActionButton": {
+        "usage":"global FAB for receipts + contextual quick-add in lists"
+      }
+    }
+  },
+  "deliverables_requested": [
+    "Django project with apps: companies, brands, branches, people, documents (reports/contracts/promissory/financials/receipts), templates, calendar, audit",
+    "DRF viewsets & routers for all endpoints, serializers, permissions (including Receipt & Template endpoints)",
+    "Celery + tasks + example long-running task for heavy report generation and template rendering",
+    "Next.js app with pages and core components including ReceiptTimeline, TemplateEditor (tiptap), CalendarPanel, FAB",
+    "Dockerfile for backend and frontend + docker-compose.dev.yml",
+    ".env.example file",
+    "seed data script (2 companies, 3 brands each, receipts, templates, calendar events, financial records, contracts, promissory notes, people)",
+    "GitHub Actions CI workflow example",
+    "README with setup & deploy instructions and front-end dev notes (theme tokens & tailwind config)"
+  ],
+  "sample_seed_data": {
+    "companies": [
+      {
+        "title":"Acme Holdings",
+        "tax_number":"TAX-ACME-001",
+        "email":"info@acme.example",
+        "iban":"TR330006100519786457841326",
+        "description":"Demo company Acme"
+      },
+      {
+        "title":"Beta Group",
+        "tax_number":"TAX-BETA-002",
+        "email":"info@beta.example",
+        "iban":"TR330006100519786457841327",
+        "description":"Demo company Beta"
+      }
+    ],
+    "brands_per_company": 3,
+    "branches_per_brand": 1,
+    "people_per_branch": {
+      "employees": 5,
+      "investors": 5,
+      "partners": 3
+    },
+    "receipts": {
+      "per_branch": 8,
+      "per_person": 3,
+      "example": [
+        {
+          "title":"Tahsilat - Nakit",
+          "description":"Ödeme dekontu: kasadan tahsilat",
+          "amount":1200.50,
+          "currency":"TRY",
+          "date":"2025-10-20",
+          "level":"branch"
+        },
+        {
+          "title":"Yatırım Girişi",
+          "description":"Yatırımcı A tarafından yapılan ödeme",
+          "amount":50000.00,
+          "currency":"TRY",
+          "date":"2025-09-05",
+          "level":"person"
+        }
+      ]
+    },
+    "templates": [
+      {
+        "title":"Standart Çalışan Sözleşmesi",
+        "template_type":"contract",
+        "content_html":"<p>Bu sözleşme {{isim}} {{soyisim}} için düzenlenmiştir. Ücret: {{ucret}} TL.</p>",
+        "placeholders":["isim","soyisim","ucret"]
+      },
+      {
+        "title":"Örnek Senet Şablonu",
+        "template_type":"promissory_note",
+        "content_html":"<p>Senet tutarı: {{yatirim_tutari}} TL. Alacaklı: {{alacakli}}.</p>",
+        "placeholders":["yatirim_tutari","alacakli"]
+      },
+      {
+        "title":"Aylık Finansal Özet",
+        "template_type":"report",
+        "content_html":"<h1>{{sube_adi}} - Aylık Özet</h1><p>Toplam gelir: {{toplam_gelir}}</p>",
+        "placeholders":["sube_adi","toplam_gelir"]
+      }
+    ],
+    "calendar_events": [
+      {
+        "title":"Vade Tarihi - Senet #001",
+        "start":"2025-11-15T09:00:00",
+        "category":"upcoming_payment"
+      },
+      {
+        "title":"Sözleşme Başlangıcı - Acme",
+        "start":"2025-11-01T10:00:00",
+        "category":"new_contract"
+      }
+    ]
+  },
+  "recommended_project_tasks_for_gemini": [
+    "Generate Django project scaffold and apps with models above (including migrations).",
+    "Create DRF serializers, viewsets, and routers for all models with filtering, pagination, and permissions hooks.",
+    "Implement JWT auth endpoints (login, refresh, logout) with blacklist refresh tokens.",
+    "Implement file upload endpoints supporting chunked uploads and local & S3 storage backends (configurable by env).",
+    "Create Celery config, sample tasks and task status endpoints (render_template_preview, generate_heavy_report).",
+    "Implement report generation pipeline: lightweight (on-the-fly) and heavy (Celery -> Excel/PDF -> S3).",
+    "Implement template rendering service: tiptap HTML content -> Jinja-like placeholder replacement -> WeasyPrint for PDF, python-docx-template for DOCX; include preview endpoint and 'generate sample' mode.",
+    "Create audit logging middleware/signals to populate AuditLog on create/update/delete for sensitive models.",
+    "Generate Next.js project with the file structure and components list. Include auth flow (login/register), JWT handling (in lib/api.ts), TemplateEditor (tiptap), ReceiptTimeline, FAB, CalendarPanel, FileUploader (chunked), DataTable (server-side pagination & export).",
+    "Create Dockerfiles and docker-compose for development, including Postgres, Redis, Celery worker, Celery beat, Nginx reverse proxy.",
+    "Produce .env.example and README with local dev run steps and how to run seed script.",
+    "Add GitHub Actions workflow: test & lint & build images; include migration check step."
+  ],
+  "security_and_performance_notes": [
+    "Sensitive fields encryption: recommended django-fernet-field or Django-cryptography; limit exposure via DRF serializers.",
+    "Index frequently filtered fields: receipts.date, receipts.level, reports.report_date, templates.template_type.",
+    "Rate-limit auth endpoints and large file uploads.",
+    "Use S3 presigned URLs for direct uploads in production (multipart).",
+    "Add caching for heavy report queries and consider materialized views for repeated aggregations."
+  ],
+  "gemini_execution_instructions": {
+    "intent": "scaffold_full_project_with_updates",
+    "verbosity": "generate code files, docker compose, CI, seed script and migration files",
+    "output_format": "zip of repo or file tree with files and commands to run",
+    "post_generation_steps": [
+      "1) copy .env.example to .env and fill required values (DB, REDIS, AWS creds if using S3).",
+      "2) docker-compose up --build to start dev environment.",
+      "3) run manage.py migrate && python seed_script.py",
+      "4) run npm install && npm run dev for frontend or run via docker-compose frontend service.",
+      "5) create superuser for Django admin.",
+      "6) test Celery tasks by enqueueing sample heavy report."
+    ]
+  }
+}
+

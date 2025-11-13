@@ -1,0 +1,84 @@
+CRM yönetim sistemi için modern, koyu temalı bir “Kişi Ekle” modalı tasarla ve işlevsellik kazandır.  
+Tasarım sade, kurumsal ve sezgisel olsun. Arka plan #233232 tonlarında, kartlar ve input alanları yuvarlatılmış kenarlara sahip, soft gölgeli tasarlansın.  
+Tüm bileşenler responsive olmalı.
+
+## 🧩 Genel Yapı
+- Modal başlığı: “Kişi Ekle”
+- Sol üstte profil fotoğrafı alanı (boş siluet görseli olacak)
+  - Üzerine tıklanınca dosya seçme penceresi açılmalı
+  - Yüklenen görsel anında önizleme olarak gözüksün
+- Sağda kişi bilgileri, altta belgeler bölümü olacak.
+
+---
+
+## 🧍‍♂️ Kişisel Bilgiler Alanı
+1. **İsim** → input text  
+2. **Soyisim** → input text  
+3. **Rol Seçin** → dropdown menü
+   - Backend’den dinamik olarak tüm roller (admin, yönetici, yatırımcı, taşeron, çalışan vb.) çekilmeli.
+   - Kullanıcıyı sadece admin oluşturabilir.
+   - Admin ve yönetici rollerinde kişi herhangi bir dizine bağlı olmayacak.
+   - Diğer roller (“yatırımcı, çalışan, taşeron”) mutlaka bir şube altına eklenir.
+4. **Mail** → email input  
+5. **Telefon** → input (otomatik +90 formatına geçmeli)  
+6. **IBAN** → input text, otomatik TRXX XXXX XXXX... formatına göre boşluklar eklenmeli.
+
+---
+
+## 📍 Adres Bölümü
+- “Şehir” dropdown → backend’den şehir listesi gelir  
+- “Mahalle” dropdown → seçilen şehre göre mahalle listesi güncellenir  
+- “Sokak” dropdown → mahalleye göre listelenir  
+- “Açık Adres” → text area (serbest yazı)  
+Kullanıcı önce şehir ve mahalle seçtikten sonra kalan bilgileri Açık Adres kutusuna yazar.
+
+---
+
+## 💼 Yatırım Bilgileri
+- “Yatırım Yaptığı Yer” → dropdown menü  
+  - Backend’deki hiyerarşi yapısı: Şirket > Marka > Şube > Kişi
+  - Bu alanda sadece şubeler listelenecek.
+- “Yatırım Tarihi” → tarih seçici (takvim ikonuna tıklanınca mini takvim açılır)
+- “Hisse Oranı” → sadece sayı girilebilir, yanında “%” sabit olarak gözüksün.
+- “Yatırım Tutarı” → input number, girilen değeri otomatik olarak 1.000.000 → 1.000.000 formatına dönüştürsün.
+- “Aylık Kazanç = xxx.xxx ₺” kısmında:
+  - ₺ simgesi sabit kalmalı.
+  - xxx.xxx kısmı ileride eklenecek formül sonucu dinamik olarak değişecek (şimdilik placeholder).
+
+---
+
+## 📂 Belgeler Bölümü
+Başlık: “BELGELER”
+
+### 1. **Sözleşme Seç**
+- Dropdown menü → backend’den gelen sözleşme şablonları listelensin.
+- Şablon seçildiğinde hemen altında “Oluştur” butonu belirsin.
+- Oluştur’a basılınca formdaki tüm bilgiler şablona yerleştirilip yeni belge olarak önizlenir.
+
+### 2. **Senet Seç**
+- Dropdown menü → backend’den gelen senet şablonları listelensin.
+- Şablon seçildiğinde yine “Oluştur” butonu çıksın.
+- Aynı şekilde form bilgileri otomatik doldurulup önizlenir.
+
+### 3. **Dekont Yükle**
+- Dosya yükleme alanı (ikonu bulut şeklinde).
+- Yüklendikten sonra kişi oluşturulunca, kişinin detay sayfasındaki “Belgeler” sekmesinde gösterilsin.
+
+### 4. **Not**
+- Geniş text area.
+- Ekstra açıklama veya yorum yazmak için kullanılacak.
+
+
+---
+
+## 🎨 Stil
+- Ana renkler: koyu yeşil tonları (#233232, #2E3E3E)
+- Yazı tipi: Inter veya Poppins
+- Input’lar ve butonlar 2xl radius, hafif gölge
+- Hover ve aktif durumlarda #2C4E4E efekti
+- Modal köşeleri 2xl, yumuşak geçişli açılış animasyonu
+
+---
+
+Bu prompt, kişi ekleme modalını hem görsel hem işlevsel açıdan profesyonel bir CRM standardında oluşturmak için kullanılacak şekilde hazırlanmıştır.
+

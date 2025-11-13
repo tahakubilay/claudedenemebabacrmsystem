@@ -1,0 +1,390 @@
+Tam kapsamlı proje oluşturma talebi:
+
+1) Genel proje tanımı
+Bu proje, bir kullanıcının sahip olduğu ve yönettiği birden fazla şirketi, bu şirketlere bağlı markaları, markaların şubelerini, şubelerde çalışan/ortak/yatırımcı vb. kişileri ve tüm bu varlıklara ait rapor, sözleşme, senet, mali kayıtlar gibi doküman ve raporları detaylı şekilde yöneteceği kurumsal bir yönetim panelidir. Sistem hiyerarşisi:
+Company > Brand > Branch > Person (role bazlı, dinamik) > Documents (Report, Contract, PromissoryNote, FinancialRecord)
+
+2) Teknik altyapı (zorunlu)
+- Backend: Python 3.x + Django 4.x veya üstü + Django REST Framework
+- Frontend: React + Next.js (App Router)
+- Database: PostgreSQL
+- Auth: Django Auth + JWT (access + refresh)
+- File storage: Local development: Django media; Production: S3-compatible storage (ör: AWS S3)
+- Background tasks / Asenkron işlemler: Celery + Redis (ağır raporlar, dosya işleme, e-posta, PDF generation)
+- Raporlama (backend): Pandas, NumPy
+- Frontend charting: Recharts
+- Styling: Tailwind CSS + Shadcn UI (component library)
+- İkonlar: Lucide-react veya Heroicons
+- Animasyon: Framer Motion
+- PDF oluşturma/doldurma: Python kitaplıkları (WeasyPrint, reportlab, python-docx veya pydf + wkhtmltopdf) + docx-templating
+- Excel okuma/yazma: openpyxl, pandas
+- DevOps: Docker + docker-compose, Nginx + Gunicorn, CI pipelines (Github Actions veya benzeri)
+- Test: Backend: Pytest / Django test framework; Frontend: Jest + React Testing Library
+- Security: HTTPS zorunlu, CORS, rate limiting, CSRF koruması para birimleri için doğrulamalar
+
+3) Veri modelleri (tercih edilen Django model alan adları ve tipleri)
+Not: tüm modellerde created_at, updated_at otomatik timestamp olacak.
+
+Company:
+- id (PK)
+- title (CharField, max_length=255)  # Şirket Ünvanı
+- tax_number (CharField, max_length=50, unique=True)  # Vergi No
+- email (EmailField)
+- iban (CharField, max_length=34, blank=True, null=True)
+- description (TextField, blank=True, null=True)
+- is_active (BooleanField)
+- metadata (JSONField, blank=True, null=True)  # ek esneklik
+- indexes: tax_number unique, title index
+
+Brand:
+- id
+- name (CharField, max_length=255)  # Marka Adı
+- tax_number (CharField, max_length=50, blank=True, null=True)
+- phone (CharField, max_length=30, blank=True, null=True)
+- email (EmailField, blank=True, null=True)
+- branch_count (IntegerField, default=0)  # otomatik hesaplanacak (aggregate)
+- company (ForeignKey -> Company, related_name='brands', on_delete=CASCADE)
+- metadata (JSONField)
+- indexes: company+name unique constraint
+
+Branch:
+- id
+- name (CharField, max_length=255)  # Şube Adı
+- address (TextField)
+- phone (CharField, max_length=30)
+- email (EmailField)
+- sgk_number (CharField, max_length=50, blank=True, null=True)  # SGK Numarası
+- brand (ForeignKey -> Brand, related_name='branches', on_delete=CASCADE)
+- metadata (JSONField)
+- indexes: brand+name unique
+
+Person:
+- id
+- full_name (CharField, max_length=255)
+- national_id (CharField, max_length=11, blank=True, null=True)  # TC Kimlik Numarası
+- address (TextField, blank=True, null=True)
+- phone (CharField, max_length=30, blank=True, null=True)
+- email (EmailField, blank=True, null=True)
+- iban (CharField, max_length=34, blank=True, null=True)
+- description (TextField, blank=True, null=True)
+- role (ForeignKey -> Role model OR CharField)  # role eklenebilir/dinamik olacak; frontend'de görünmez olarak kabul edilir
+- branch (ForeignKey -> Branch, related_name='people', on_delete=CASCADE)
+- is_active (BooleanField)
+- indexes: branch+full_name index
+
+Role (dinamik):
+- id
+- name (CharField, e.g., 'employee', 'investor', 'partner', 'manager', 'custom')
+- permissions (JSONField)  # opsiyonel genişletilebilir yetki seti
+
+Report:
+- id
+- title
+- content (TextField kısa özet)
+- file (FileField, null=True)  # PDF veya Excel
+- report_type (CharField: daily, weekly, monthly, yearly, custom)
+- scope (CharField: company, brand, branch, person)
+- report_date (DateField)
+- company (FK nullable)
+- brand (FK nullable)
+- branch (FK nullable)
+- person (FK nullable)
+- tags (Array/JSON)
+- metadata (JSON)
+- indexes: report_type, report_date
+
+Contract:
+- id
+- title
+- contract_number (CharField, unique)
+- template_name (CharField)  # sistemde bulunan şablonun adı
+- file (FileField)  # oluşturulmuş PDF veya DOCX
+- related_company (FK)
+- related_brand (FK)
+- related_branch (FK)
+- related_person (FK)
+- start_date, end_date
+- status (CharField: draft, active, expired, terminated)
+- created_by (FK to User)
+- versioning (JSONField)  # değişiklik versiyonları
+- indexes: contract_number unique
+
+PromissoryNote:
+- id
+- title
+- note_number (CharField, unique)
+- file (FileField)
+- amount (DecimalField)
+- due_date (DateField)
+- payment_status (CharField: pending, paid, overdue)
+- relations: related_company/brand/branch/person
+- created_by
+- metadata
+
+FinancialRecord:
+- id
+- title
+- type (CharField: income, expense, turnover, profit_share)
+- amount (DecimalField)
+- currency (CharField)
+- date (DateField)
+- related_company/brand/branch/person
+- description
+- attachments (FileField or ManyToMany to uploaded files)
+- metadata
+
+AuditLog:
+- id
+- actor (User FK)
+- action (CharField)
+- object_type (CharField)
+- object_id
+- changes (JSONField)
+- timestamp
+
+4) Dosya/doküman ve şablon yönetimi
+- File upload: PDF, DOCX, XLSX, CSV desteklenecek. Büyük dosya yüklemede chunked upload desteklenebilir.
+- Şablonlar (contract ve promissory templates): DOCX veya HTML template olarak saklanacak. Template engine kullanılarak (python-docx-template veya Jinja for HTML -> weasyprint) veri yerleştirilecek.
+- Doküman versiyonlama: Contract ve PromissoryNote için değişiklik kaydı ve versiyon numarası tutulacak.
+- Önizleme: PDF görüntüleyici bileşeni (frontend) ile tarayıcı içinde görüntüleme. Yazdır (print) butonu tarayıcı print penceresini açmalı.
+
+5) API uç noktaları (REST, metodlar ve davranış)
+Auth:
+- POST /api/auth/login/  {username/email, password} -> {access, refresh}
+- POST /api/auth/refresh/ {refresh} -> {access}
+- POST /api/auth/logout/ {refresh} (blacklist refresh token)
+- POST /api/auth/register/ (opsiyonel; admin-only)
+
+Company:
+- GET /api/companies/  (list, filtering, pagination)
+- POST /api/companies/  (create)
+- GET /api/companies/{id}/
+- PUT/PATCH /api/companies/{id}/
+- DELETE /api/companies/{id}/
+
+Brand:
+- GET /api/brands/
+- POST /api/brands/
+- GET /api/brands/{id}/
+- PUT/PATCH /api/brands/{id}/
+- DELETE /api/brands/{id}/
+
+Branch:
+- GET /api/branches/
+- POST /api/branches/
+- GET /api/branches/{id}/
+- PUT/PATCH /api/branches/{id}/
+- DELETE /api/branches/{id}/
+- GET /api/branches/{id}/people/  -> liste (role filterable)
+
+Person:
+- GET /api/people/
+- POST /api/people/
+- GET /api/people/{id}/
+- PUT/PATCH /api/people/{id}/
+- DELETE /api/people/{id}/
+- GET /api/people/{id}/contracts/
+- GET /api/people/{id}/promissory-notes/
+- GET /api/people/{id}/financial-records/
+
+Report:
+- GET /api/reports/
+- POST /api/reports/  (multipart for file upload)
+- GET /api/reports/{id}/
+- PUT/PATCH /api/reports/{id}/
+- DELETE /api/reports/{id}/
+Filter parameters: scope, report_type, date_from, date_to, company_id, brand_id, branch_id, person_id, tags
+
+Contract:
+- GET /api/contracts/
+- POST /api/contracts/  (create from template: provide template_name + context data OR upload file)
+- GET /api/contracts/{id}/
+- PUT/PATCH /api/contracts/{id}/
+- DELETE /api/contracts/{id}/
+- POST /api/contracts/{id}/generate_pdf/  -> returns file or URL
+
+PromissoryNote:
+- analogous endpoints to Contract
+
+FinancialRecord:
+- GET /api/financial-records/
+- POST /api/financial-records/
+- GET /api/financial-records/{id}/
+- PUT/PATCH /api/financial-records/{id}/
+- DELETE /api/financial-records/{id}/
+- Export endpoints: /api/financial-records/export/?format=excel|pdf
+
+Utility endpoints:
+- /api/templates/  (list available templates)
+- /api/reports/generate/  (backend-triggered heavy generation via Celery)
+- /api/audit-logs/
+
+6) Authorization & Permissions
+- Role-based access control (RBAC). Role model map: permissions set for endpoints (read, create, update, delete, generate).
+- Row-level security: API should verify that user has access to the company/brand/branch referenced by request.
+- JWT access tokens short lived (e.g., 15 minutes) + refresh tokens (7-30 days). Refresh token blacklist on logout.
+- Sensitive fields (national_id, iban, tax_number) must be encrypted/hashed at rest or stored in DB with restricted access logic.
+
+7) Frontend UI / UX detayları (bileşenler, layout)
+Global:
+- Tema renkleri: background #0f1714 (very dark green/near black), primary accent #00c896 (bright green). Text: white (#ffffff) and muted grays for secondary text.
+- Font: Inter veya Poppins.
+- Layout: Top navbar (fixed height ~60px), sol vertical sidebar (width ~250px), ana içerik grid sağda.
+- Responsive: desktop: sidebar + 3-col grid; tablet: 2-col; mobile: single column + collapsible sidebar.
+
+Navbar:
+- Left: hamburger (mobile), app logo/name, "dashboard" link
+- Right: user profile avatar + name, settings icon, logout button
+
+Sidebar:
+- Profile name + small avatar
+- Navigation links: Dashboard, Companies, Brands, Branches, People, Reports, Contracts, Promissory Notes, Financials, Settings
+- Takvim küçük widget (overview) - interaktif
+
+Dashboard (ana sayfa):
+- Right side: grid 3 x 2 (cards). Card component props: title, icon, count, actions (view/list/create)
+  Cards: Companies, Brands, Branches, People, Reports, Management
+- Left column: büyük Takvim kartı + Quick Actions (Hızlı Ekle: Şirket, Marka, Şube, Kişi, Rapor)
+- Her kart: sağ üstte plus button -> açılır modal ile create form
+- Kart içi listede tıklayınca ilgili liste sayfasına veya detay modalına gider
+
+List sayfaları:
+- Table + Filters + Search + Export (CSV, Excel, PDF) + Pagination
+- Example columns: Companies: Title, Tax No, Email, IBAN, #Brands, Actions
+- Row actions: view, edit, delete, quick create child (örn brand ekle)
+
+Detail sayfası (ör: Branch detail):
+- Header: Branch name + breadcrumbs (Company > Brand > Branch)
+- Actions: Edit branch, Delete, Create Person, View Contracts, View PromissoryNotes, Generate Report
+- Tabs: Overview | People | Contracts | Promissory Notes | Financials | Reports
+- People tab: list of persons filtered by role if user navigated from role-specific view
+
+Person detail:
+- Show person fields (full_name, national_id masked except for authorized roles, contact info)
+- Buttons: Create Contract (opens contract creation modal with prefilled related_person), View Contracts, Create Promissory Note, View Financial Records
+- Contracts and Notes listed with quick preview (click -> PDF viewer modal)
+
+Modals & Forms (her create/edit işlemi modal veya full page olabilir)
+- Create/Edit Company modal: fields per Company model; validations (tax_number unique)
+- Create/Edit Brand modal: show branch_count auto-update after branch create/delete
+- Create/Edit Branch modal: includes address autocomplete optional, SGK validation
+- Create/Edit Person modal: role dropdown (admin only or configurable), national_id validation, optional file attachments
+- Create Report modal: choose scope (company/brand/branch/person), select target entity via searchable dropdown, attach file (pdf/xlsx), select report_type and date, optional schedule (one-time or recurring)
+- Create Contract modal:
+  - Option A: Create from Template -> choose template, fill template placeholder fields via form, preview populated doc, Generate -> stores file and version
+  - Option B: Upload existing contract file -> attach to entity, set status/dates
+  - Fields: title, contract_number (auto generate), start_date, end_date, status, related entities
+  - Actions after create: View (pdf viewer modal), Edit, Download, Print, Version History
+- Create Promissory Note modal: similar to contract, with amount, due_date, payment_status
+- File Viewer modal: embedded PDF viewer with toolbar: download, print, sign (future), version selector
+
+Rapor sayfası:
+- Comprehensive filter bar: scope, company, brand, branch, person, report_type, date_from, date_to, tags, created_by
+- Results: table with pagination + charts on top summary (using Recharts)
+- Chart types: time-series (line) for turnover / income / expense; stacked bar for cost breakdown; pie for profit distribution
+- Drill-down: clicking chart segment filters table to relevant rows
+- Heavy report generation: user can request "Generate Full Financial Report" -> triggers background Celery task; frontend polls status endpoint and downloads result when ready
+- Export: PDF and Excel export for both table and charts (server-side rendering for PDF to include charts as images)
+
+Interactive behaviors:
+- Breadcrumbs on top of every detail page; back button (simple left-arrow) returns to previous list/view
+- Page transitions: simple fade-in/out or slide (Framer Motion)
+- Optimistic UI for create/edit with proper rollback on error
+- Inline validation for forms, server error handling mapping to fields
+- Toast notifications for success/error
+
+8) Raporların teknik detayları (çok ayrıntılı)
+- Rapor veri kaynakları: DB tablolar (FinancialRecord, Contracts, PromissoryNote, Reports) + yüklenen DOSYALAR (Excel içerisinden import)
+- Import: Excel import processor reads structured sheets (mappings configurable). Pandas used to normalize and ingest. Validation report returned after import (rows accepted / rejected with error messages).
+- Analizler:
+  - Gelir/Gider zaman serisi (daily/weekly/monthly/yearly)
+  - Marka/Şube/Kişi bazlı ciro ve maliyet analizi
+  - Brüt kar / net kar hesapları
+  - Kar dağılımı simülasyonları (ör: ortaklara göre yüzde bazlı dağılım)
+  - Senetlerin vade analizleri (vadesi geçen vs yaklaşan)
+  - Sözleşme portföyü (süre bitimine göre uyarılar)
+- Report generation:
+  - Lightweight reports: generated on-the-fly by aggregasyon query + pandas -> JSON -> frontend charts
+  - Heavy reports (ör. aylık mali özet, yıllık kar dağılımı): Celery görevi oluşturur, dosya (PDF/Excel) üretir, S3’e yükler ve download URL döndürür
+- Report scheduling:
+  - Users can schedule recurring reports (daily/weekly/monthly/yearly) with recipients (emails) -> Celery beat schedules tasks
+- Audit & provenance: her rapor metadata içinde hangi veriler kullanıldı (date range, filters) ve hangi user tarafından oluşturulduğu tutulur
+
+9) UI component ve dosya/fonksiyon mimarisi önerisi (frontend)
+Klasör yapısı (ör öneri):
+- /app (Next.js app router)
+  - /layout.tsx (global layout: Navbar + Sidebar)
+  - /dashboard/page.tsx
+  - /companies/page.tsx
+  - /companies/[id]/page.tsx
+  - /brands/page.tsx
+  - /branches/page.tsx
+  - /people/page.tsx
+  - /people/[id]/page.tsx
+  - /reports/page.tsx
+  - /contracts/page.tsx
+  - /promissory-notes/page.tsx
+  - /settings/page.tsx
+- /components
+  - Card.tsx, DataTable.tsx, ModalForm.tsx, PDFViewer.tsx, FileUploader.tsx, ChartCard.tsx, FiltersBar.tsx, Breadcrumbs.tsx, ConfirmDialog.tsx
+- /lib
+  - api.ts (fetch wrapper handling JWT, refresh), auth.ts, validators.ts
+- /hooks
+  - useAuth, usePolling, useToast, useFetch
+- /styles
+  - tailwind config + theme tokens
+
+Component özellikleri:
+- FileUploader: chunked upload fallback, progress bar, file type validation
+- PDFViewer: uses pdf.js or iframe viewer, toolbar for download/print
+- ModalForm: dynamic schema-driven form (fields config), validations
+- DataTable: server-side pagination + sorting + column visibility + export actions
+
+10) Güvenlik & veri gizliliği
+- Sensitive fields masking in UI (TC Kimlik, IBAN) except for authorized roles
+- Rate limiting on auth endpoints
+- Strong password policies, optional 2FA (TOTP)
+- JWT secret rotation, token revocation list
+- S3 presigned URLs with limited expiry for file downloads
+- DB backups + encryption at rest (production)
+- Loglama: audit logs for create/update/delete on sensitive models
+- Compliance: consider GDPR/TÜRKİYE KVKK gereksinimleri için kişisel veri işleme açıklaması
+
+11) Deployment & operasyon
+- Dockerfile for backend and frontend; docker-compose for local development: services: web (django), db (postgres), redis, celery, nginx, frontend
+- Production: build Docker images, run behind Nginx, Gunicorn workers, use managed Postgres, managed Redis
+- CI: run linters, unit tests, integration tests; build images and push to registry; run migration and migration checks
+- Monitoring: Sentry for exceptions, Prometheus + Grafana for metrics
+- Backups: nightly DB backup to S3, retention policy
+
+12) Test & kalite
+- Unit tests for models, serializers, permissions
+- Integration tests for API flows (auth + create company + create brand + create branch + create person + generate report)
+- Frontend tests for critical components and flows: auth, create entity modals, file upload, PDF preview
+- E2E tests (Cypress) for full user flows
+
+13) Genişletilebilirlik
+- Yeni model tipleri ve rapor türleri eklenebilir (metadata fields ve JSONField tasarımı ile).
+- Multi-tenant düşünülerek domain-level sharding gerekli ise ileride eklenebilir.
+- Microservice ihtiyacı doğarsa heavy-reporting servisleri ayrı konteyner/microservice haline getirilebilir.
+
+14) Kullanıcı akış örnekleri (workflows)
+A) Yeni şirket oluşturma:
+- Kullanıcı Dashboard -> Companies -> + -> Company modal -> doldur -> submit -> backend create -> redirect to company detail
+
+B) Marka ve şube ekleme:
+- Company detail -> Brands tab -> + -> create brand -> brand list güncellenir -> Brand detail -> Branches tab -> + -> create branch -> branch_count auto güncellenir
+
+C) Kişi (yatırımcı) ekleyip sözleşme oluşturma:
+- Branch detail -> People tab -> + -> create person (role seçimi admin yapar)
+- Person detail -> "Sözleşme oluştur" button -> Contract modal -> choose template -> fill placeholders -> preview -> Generate -> contract file oluşturulur, version kaydı tutulur
+
+D) Finansal rapor oluşturma:
+- Reports -> Yeni Rapor -> scope: branch, seç target branch -> report_type: monthly -> date range -> Generate -> lightweight: on-the-fly; heavy: Celery task -> bildirim ve download link
+
+15) Geliştirme isteği
+- Bu tanım ile tam proje oluştur: backend (models, serializers, viewsets, permissions, Celery tasks), frontend (Next.js sayfaları, bileşenler, auth flow), Docker compose development ortamı, örnek .env.example dosyası, başlangıç DB seed script (2 şirket, her şirkete 3 marka, her markaya 1 şube, her şubeye 5 çalışan, 5 yatırımcı, 3 ortak ile demo veri) ve basit CI workflow.
+
+Sonuç:
+Bu prompt, projenin tüm teknik, tasarım ve işleyiş gereksinimlerini kapsar. Sistemin esnek, güvenli ve genişletilebilir olmasını sağlar; sözleşme/senet/doküman yönetimi, ağır rapor üretimi ve dosya işlemleri başlangıçtan itibaren entegre edilmiş halde gelir. Bu metni olduğu gibi kullanarak tam proje scaffold'u oluştur.
+

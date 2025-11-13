@@ -1,0 +1,106 @@
+/* frontend/src/app/calendar/calendar.css */
+@import "react-big-calendar/lib/addons/dragAndDrop/styles.css";
+/* Ana Arka Plan */
+.rbc-calendar {
+  background-color: #253636; /* brand-DEFAULT */
+  color: #E5E7EB; /* text-gray-200 */
+  border-radius: 0.75rem; /* rounded-xl */
+  padding: 1rem;
+  border: 1px solid #2E3E3E; /* brand-light */
+}
+
+/* Header (Ay/Hafta/Gün Butonları ve Tarih) */
+.rbc-toolbar {
+  margin-bottom: 1.5rem;
+}
+
+.rbc-toolbar .rbc-toolbar-label {
+  color: #FFFFFF;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.rbc-btn-group button {
+  background-color: #2E3E3E; /* brand-light */
+  color: #FFFFFF;
+  border: none;
+  padding: 0.5rem 1rem;
+  transition: all 0.2s ease;
+  border-radius: 0.75rem; /* rounded-xl */
+  margin: 0 4px;
+}
+
+.rbc-btn-group button:hover,
+.rbc-btn-group button:focus {
+  background-color: #4ADE80; /* brand-green */
+  color: #1F2C2C; /* brand-dark */
+  box-shadow: 0 4px 14px 0 rgba(74, 222, 128, 0.3);
+}
+
+.rbc-btn-group button.rbc-active {
+  background-color: #4ADE80; /* brand-green */
+  color: #1F2C2C;
+  font-weight: bold;
+}
+
+/* Takvim Izgarası */
+.rbc-header {
+  background-color: #1F2C2C; /* brand-dark */
+  border: 1px solid #2E3E3E;
+  padding: 0.5rem;
+  color: #9CA3AF; /* text-gray-400 */
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.rbc-day-bg, .rbc-month-row {
+  border-left: 1px solid #2E3E3E;
+}
+
+.rbc-month-row:first-child {
+  border-top: 1px solid #2E3E3E;
+}
+
+.rbc-day-bg.rbc-off-range-bg {
+  background-color: #1F2C2C; /* Koyu zemin */
+  opacity: 0.7;
+}
+
+.rbc-day-bg.rbc-today {
+  background-color: #2E3E3E; /* brand-light */
+}
+
+/* Etkinlikler (upgrade v2: yeşil, mavi, turuncu vurgular) */
+.rbc-event, .rbc-day-slot .rbc-background-event {
+  border: none;
+  border-radius: 6px;
+  padding: 4px 8px;
+  opacity: 0.9;
+  transition: opacity 0.2s ease;
+}
+
+.rbc-event:hover {
+  opacity: 1;
+}
+
+/* Farklı etkinlik türleri için renkler (API'den gelen event.type'a göre atanabilir) */
+.rbc-event {
+  background-color: #4ADE80; /* brand-green */
+  color: #1F2C2C;
+  font-weight: 500;
+}
+
+.rbc-event.event-type-meeting {
+  background-color: #3B82F6; /* blue-500 */
+  color: #FFFFFF;
+}
+
+.rbc-event.event-type-payment {
+  background-color: #F97316; /* orange-500 */
+  color: #FFFFFF;
+}
+
+.rbc-show-more {
+  color: #4ADE80;
+  background-color: transparent;
+}
