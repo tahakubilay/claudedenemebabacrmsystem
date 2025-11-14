@@ -47,7 +47,7 @@ export function useAuth(requireAuth = true) {
     };
 
     checkAuth();
-  }, [requireAuth, router, setUser, setLoading, isLoading]);
+  }, [requireAuth, router, setUser, setLoading]);
 
   const login = async (username: string, password: string) => {
     const { user } = await authService.login(username, password);
